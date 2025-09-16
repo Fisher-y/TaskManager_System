@@ -1,117 +1,123 @@
-﻿#include "TaskManager.h"
+﻿#ifndef COMMAND_H
+#define COMMAND_H
+
+
+#include <string>
+
+
+class CommandBase{
+public:
+    virtual void execute(const std::string& args) = 0;
+};
+
+
+// CRTP 基类模板
+template <typename Derived>
+class Command :public CommandBase{
+public:
+    void execute(const std::string& args) {
+        static_cast<Derived*>(this)->executeImpl(args);
+    }
+};
+
+
+// 具体命令类示例
+#include "TaskManager.h"
 #include "Logger.h"
 #include <iostream>
 
 
-TaskManager::TaskManager() : nextId(1) {
-    loadTasks();
-}
-
-
-void TaskManager::addTask(const std::string& description, int priority, const std::string& dueDate) {
-    Task task;
-    task.id = nextId++;
-    task.description = description;
-    task.priority = priority;
-    task.dueDate = dueDate;
-    tasks.push_back(task);
-    Logger::getInstance().log("添加任务: " + task.toString());
-    saveTasks();
-}
-
-
-void TaskManager::deleteTask(int id) {
-    auto it = std::find_if(tasks.begin(), tasks.end(), [id](const Task& task) {
-        return task.id == id;
-    });
-    if (it != tasks.end()) {
-        Logger::getInstance().log("删除任务: " + it->toString());
-        tasks.erase(it);
-        saveTasks();
-    } else {
-        std::cout << "未找到ID为 " << id << " 的任务。" << std::endl;
-    }
-}
-
-
-void TaskManager::updateTask(int id, const std::string& description, int priority, const std::string& dueDate) {
-    for (auto& task : tasks) {
-        if (task.id == id) {
-            Logger::getInstance().log("更新前任务: " + task.toString());
-            task.description = description;
-            task.priority = priority;
-            task.dueDate = dueDate;
-            Logger::getInstance().log("更新后任务: " + task.toString());
-            saveTasks();
+// 添加任务命令
+class AddCommand : public Command<AddCommand> {
+public:
+    AddCommand(TaskManager& manager) : taskManager(manager) {}
+    void executeImpl(const std::string& args) {
+        // 简单的参数解析：描述,优先级,截止日期
+        size_t pos1 = args.find(',');
+        size_t pos2 = args.find(',', pos1 + 1);
+        if (pos1 == std::string::npos || pos2 == std::string::npos) {
+            std::cout << "参数格式错误。请使用: add <描述>,<优先级>,<截止日期>" << std::endl;
             return;
         }
+        std::string description = args.substr(0, pos1);
+        int priority = std::stoi(args.substr(pos1 + 1, pos2 - pos1 - 1));
+        std::string dueDate = args.substr(pos2 + 1);
+        taskManager.addTask(description, priority, dueDate);
+        std::cout << "任务添加成功。" << std::endl;
     }
-    std::cout << "未找到ID为 " << id << " 的任务。" << std::endl;
-}
+private:
+    TaskManager& taskManager;
+};
 
 
-void TaskManager::listTasks(int sortOption) const {
-    std::vector<Task> sortedTasks = tasks;
-    switch (sortOption) {
-        case 1:
-            std::sort(sortedTasks.begin(), sortedTasks.end(), compareByPriority);
-            break;
-        case 2:
-            std::sort(sortedTasks.begin(), sortedTasks.end(), compareByDueDate);
-            break;
-        default:
-            break;
-    }
-    for (const auto& task : sortedTasks) {
-        std::cout << task.toString() << std::endl;
-    }
-}
-
-
-void TaskManager::loadTasks() {
-    std::ifstream inFile("tasks.txt");
-    if (!inFile.is_open()) {
-        Logger::getInstance().log("任务文件不存在，开始新建。");
-        return;
-    }
-    std::string line;
-    while (std::getline(inFile, line)) {
-        std::istringstream iss(line);
-        Task task;
-        char delimiter;
-        iss >> task.id >> delimiter;
-        std::getline(iss, task.description, ',');
-        iss >> task.priority >> delimiter;
-        iss >> task.dueDate;
-        tasks.push_back(task);
-        if (task.id >= nextId) {
-            nextId = task.id + 1;
+// 删除任务命令
+class DeleteCommand : public Command<DeleteCommand> {
+public:
+    DeleteCommand(TaskManager& manager) : taskManager(manager) {}
+    void executeImpl(const std::string& args) {
+        try{
+            size_t pos;
+            int id = std::stoi(args, &pos);
+            if(pos != args.length()){
+                std::cout << "参数格式错误。请使用: delete <ID>" << std::endl;
+                return;
+            }
+            taskManager.deleteTask(id);
+            std::cout << "任务删除成功。" << std::endl;
+        }catch(const std::invalid_argument& e){
+            std::cout << "参数格式错误。请使用: delete <ID>" << std::endl;
+            return;
+        }catch(const std::out_of_range& e){
+            std::cout << "ID超出范围。请使用有效的任务ID。" << std::endl;
+            return;
         }
+
+
     }
-    inFile.close();
-    Logger::getInstance().log("加载任务成功。");
-}
+private:
+    TaskManager& taskManager;
+};
 
 
-void TaskManager::saveTasks() const {
-    std::ofstream outFile("tasks.txt");
-    if (!outFile.is_open()) {
-        Logger::getInstance().log("无法打开任务文件进行保存。");
-        return;
+// 列出任务命令
+class ListCommand : public Command<ListCommand> {
+public:
+    ListCommand(TaskManager& manager) : taskManager(manager) {}
+    void executeImpl(const std::string& args) {
+        int sortOption = 0;
+        if (!args.empty()) {
+            sortOption = std::stoi(args);
+        }
+        taskManager.listTasks(sortOption);
     }
-    for (const auto& task : tasks) {
-        outFile << task.id << "," << task.description << "," << task.priority << "," << task.dueDate << "\\n";
+private:
+    TaskManager& taskManager;
+};
+
+
+// 更新任务命令
+class UpdateCommand : public Command<UpdateCommand> {
+public:
+    UpdateCommand(TaskManager& manager) : taskManager(manager) {}
+    void executeImpl(const std::string& args) {
+        // 参数格式: ID,描述,优先级,截止日期
+        size_t pos1 = args.find(',');
+        size_t pos2 = args.find(',', pos1 + 1);
+        size_t pos3 = args.find(',', pos2 + 1);
+        if (pos1 == std::string::npos || pos2 == std::string::npos || pos3 == std::string::npos) {
+            std::cout << "参数格式错误。请使用: update <ID>,<描述>,<优先级>,<截止日期>" << std::endl;
+            return;
+        }
+        int id = std::stoi(args.substr(0, pos1));
+        std::string description = args.substr(pos1 + 1, pos2 - pos1 - 1);
+        int priority = std::stoi(args.substr(pos2 + 1, pos3 - pos2 - 1));
+        std::string dueDate = args.substr(pos3 + 1);
+        taskManager.updateTask(id, description, priority, dueDate);
+        std::cout << "任务更新成功。" << std::endl;
     }
-    outFile.close();
-    Logger::getInstance().log("保存任务成功。");
-}
+private:
+    TaskManager& taskManager;
+};
 
 
-bool TaskManager::compareByPriority(const Task& a, const Task& b) {
-    return a.priority < b.priority;
-}
-
-
-bool TaskManager::compareByDueDate(const Task& a, const Task& b) {
-    return a.dueDate < b.dueDate;
-}
+#endif // COMMAND_H
