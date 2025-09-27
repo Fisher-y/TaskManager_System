@@ -93,11 +93,11 @@ make
 ### 命令概览
 系统支持以下命令：
 -  add  - 添加新任务
--  del  ete  - 删除任务
--  lis  t  - 列出任务
--  upd  ate  - 更新任务详情
--  sta  tus  - 更新任务状态
--  exi  t  - 退出程序
+-  delete  - 删除任务
+-  list  - 列出任务
+-  update  - 更新任务详情
+-  status  - 更新任务状态
+-  exit  - 退出程序
 -  help  - 查看帮助
 
 详细命令语法
