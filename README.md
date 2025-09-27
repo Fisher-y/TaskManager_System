@@ -161,7 +161,6 @@ RAII技术确保资源安全释放
 完整的状态流转机制确保任务生命周期可控：
 pending（待处理） → in_progress（进行中） → completed（已完成）
 
-Plain Text
 
 4. 日志系统
 线程安全的单例日志系统
